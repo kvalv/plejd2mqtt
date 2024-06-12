@@ -28,12 +28,12 @@ async function main() {
   }
 
   const plejdApi = new api.PlejdApi(config.site, config.username, config.password);
-  const client = new mqtt.MqttClient(config.mqttBroker, config.mqttUsername, config.mqttPassword);
+  const mqttClient = new mqtt.MqttClient(config.mqttBroker, config.mqttUsername, config.mqttPassword);
 
   ['SIGINT', 'SIGHUP', 'SIGTERM'].forEach(signal => {
     process.on(signal, () => {
       console.log(`Received ${signal}. Cleaning up.`);
-      client.disconnect(() => process.exit(0));
+      mqttClient.disconnect(() => process.exit(0));
     });
   });
 
@@ -44,12 +44,12 @@ async function main() {
   // parse all devices from the API
   const devices = plejdApi.getDevices();
 
-  client.on('connected', () => {
+  mqttClient.on('connected', () => {
     console.log('plejd-mqtt: connected to mqtt.');
-    client.discover(devices);
+    mqttClient.discover(devices);
   });
 
-  client.init();
+  mqttClient.init();
 
   // init the BLE interface
   const sceneManager = new SceneManager(plejdApi.site, devices);
@@ -69,15 +69,15 @@ async function main() {
 
   // subscribe to changes from Plejd
   bt.on('stateChanged', (deviceId, command) => {
-    client.updateState(deviceId, command);
+    mqttClient.updateState(deviceId, command);
   });
 
   bt.on('sceneTriggered', (deviceId, scene) => {
-    client.sceneTriggered(scene);
+    mqttClient.sceneTriggered(scene);
   });
 
   // subscribe to changes from HA
-  client.on('stateChanged', (device, command) => {
+  mqttClient.on('stateChanged', (device, command) => {
     const deviceId = device.id;
 
     if (device.typeName === 'Scene') {
@@ -100,7 +100,7 @@ async function main() {
       // since the switch doesn't get any updates on whether it's on or not,
       // we fake this by directly send the updateState back to HA in order for
       // it to change state.
-      client.updateState(deviceId, {
+      mqttClient.updateState(deviceId, {
         state: state === 'ON' ? 1 : 0
       });
     } else {
@@ -115,9 +115,9 @@ async function main() {
     }
   });
 
-  client.on('settingsChanged', (settings) => {
+  mqttClient.on('settingsChanged', (settings) => {
     if (settings.module === 'mqtt') {
-      client.updateSettings(settings);
+      mqttClient.updateSettings(settings);
     } else if (settings.module === 'ble') {
       bt.updateSettings(settings);
     } else if (settings.module === 'api') {
