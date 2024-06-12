@@ -5,7 +5,7 @@ const _ = require('lodash');
 const startTopic = 'homeassistant/status';
 
 // #region logging
-let debug = '';
+let debug = 'console';
 
 const getLogger = () => {
   const consoleLogger = msg => console.log('plejd-mqtt', msg);
@@ -97,6 +97,9 @@ class MqttClient extends EventEmitter {
         self.emit('connected');
       });
 
+      this.client.subscribe("z/home/lights/sofa/set");
+      this.client.subscribe("z/home/lights/table/set");
+
       this.client.subscribe(getSubscribePath(), (err) => {
         if (err) {
           logger('error: unable to subscribe to control topics');
@@ -115,6 +118,7 @@ class MqttClient extends EventEmitter {
     });
 
     this.client.on('message', (topic, message) => {
+      console.log("mqtt: got message", topic, message)
       //const command = message.toString();
       const command = message.toString().substring(0, 1) === '{'
         ? JSON.parse(message.toString())
@@ -127,10 +131,27 @@ class MqttClient extends EventEmitter {
       else if (topic === getSettingsTopic()) {
         self.emit('settingsChanged', command);
       }
-
-      if (_.includes(topic, 'set')) {
-        const device = self.devices.find(x => getCommandTopic(x) === topic);
-        self.emit('stateChanged', device, command);
+      if (topic == "z/home/lights/sofa/set") {
+        /** @type { { brightness: number } } */
+        let str = message.toString(undefined).trim();
+        console.log(`mikael - got message --${str}--`)
+        let parsed = JSON.parse(str);
+        // turn off
+        if (parsed.brightness === 0) {
+          self.emit("stateChanged", {id: 12},  {state: "OFF", brightness: 0});
+        } else {
+          self.emit("stateChanged", {id: 12},  {state: "ON", ...parsed});
+        }
+      }
+      if (topic == "z/home/lights/table/set") {
+        /** @type { { brightness: number } } */
+        let parsed = JSON.parse(message.toString(undefined));
+        // turn off
+        if (parsed.brightness === 0) {
+          self.emit("stateChanged", {id: 11},  {state: "OFF", brightness: 0});
+        } else {
+          self.emit("stateChanged", {id: 11},  {state: "ON", ...parsed});
+        }
       }
     });
   }
@@ -219,6 +240,7 @@ class MqttClient extends EventEmitter {
       payload = JSON.stringify(payload);
     }
 
+    console.log("mqtt: publish state", getStateTopic(device), payload);
     this.client.publish(
       getStateTopic(device),
       payload

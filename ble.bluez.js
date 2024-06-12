@@ -4,7 +4,7 @@ const xor = require('buffer-xor');
 const _ = require('lodash');
 const EventEmitter = require('events');
 
-let debug = '';
+let debug = 'console';
 
 const getLogger = () => {
   const consoleLogger = msg => console.log('plejd-ble', msg);
@@ -324,7 +324,6 @@ class PlejdService extends EventEmitter {
 
   async authenticate() {
     console.log('authenticate()');
-    const self = this;
 
     try {
       //logger('sending challenge to device');
@@ -380,13 +379,8 @@ class PlejdService extends EventEmitter {
     clearInterval(this.pingRef);
 
     this.pingRef = setInterval(async () => {
-      logger('ping');
       await this.ping();
     }, 3000);
-  }
-
-  onPingSuccess(nr) {
-    logger('pong: ' + nr);
   }
 
   async onPingFailed(error) {
@@ -398,7 +392,6 @@ class PlejdService extends EventEmitter {
   }
 
   async ping() {
-    logger('ping()');
 
     var ping = crypto.randomBytes(1);
     let pong = null;
@@ -609,7 +602,6 @@ class PlejdService extends EventEmitter {
     const self = this;
 
     this.on('pingFailed', this.onPingFailed.bind(self));
-    this.on('pingSuccess', this.onPingSuccess.bind(self));
   }
 
   _createChallengeResponse(key, challenge) {
