@@ -1,6 +1,6 @@
 const api = require('./api');
 const mqtt = require('./mqtt');
-const PlejdService = require('./ble.bluez');
+const PlejdBluetoothService = require('./ble.bluez');
 const SceneManager = require('./scene.manager');
 
 const version = "0.4.7";
@@ -53,26 +53,26 @@ async function main() {
 
   // init the BLE interface
   const sceneManager = new SceneManager(plejdApi.site, devices);
-  const plejd = new PlejdService(cryptoKey, devices, sceneManager, config.connectionTimeout, config.writeQueueWaitTime, true);
-  plejd.on('connectFailed', () => {
+  const bt = new PlejdBluetoothService(cryptoKey, devices, sceneManager, config.connectionTimeout, config.writeQueueWaitTime, true);
+  bt.on('connectFailed', () => {
     console.log('plejd-ble: were unable to connect, will retry connection in 10 seconds.');
     setTimeout(() => {
-      plejd.init();
+      bt.init();
     }, 10000);
   });
 
-  plejd.init();
+  bt.init();
 
-  plejd.on('authenticated', () => {
+  bt.on('authenticated', () => {
     console.log('plejd: connected via bluetooth.');
   });
 
   // subscribe to changes from Plejd
-  plejd.on('stateChanged', (deviceId, command) => {
+  bt.on('stateChanged', (deviceId, command) => {
     client.updateState(deviceId, command);
   });
 
-  plejd.on('sceneTriggered', (deviceId, scene) => {
+  bt.on('sceneTriggered', (deviceId, scene) => {
     client.sceneTriggered(scene);
   });
 
@@ -83,7 +83,7 @@ async function main() {
     if (device.typeName === 'Scene') {
       // we're triggering a scene, lets do that and jump out.
       // since scenes aren't "real" devices.
-      plejd.triggerScene(device.id);
+      bt.triggerScene(device.id);
       return;
     }
 
@@ -109,9 +109,9 @@ async function main() {
     }
 
     if (state === 'ON') {
-      plejd.turnOn(deviceId, commandObj);
+      bt.turnOn(deviceId, commandObj);
     } else {
-      plejd.turnOff(deviceId, commandObj);
+      bt.turnOff(deviceId, commandObj);
     }
   });
 
@@ -119,7 +119,7 @@ async function main() {
     if (settings.module === 'mqtt') {
       client.updateSettings(settings);
     } else if (settings.module === 'ble') {
-      plejd.updateSettings(settings);
+      bt.updateSettings(settings);
     } else if (settings.module === 'api') {
       plejdApi.updateSettings(settings);
     }

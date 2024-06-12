@@ -39,7 +39,7 @@ const BLUEZ_DEVICE_ID = 'org.bluez.Device1';
 const GATT_SERVICE_ID = 'org.bluez.GattService1';
 const GATT_CHRC_ID = 'org.bluez.GattCharacteristic1';
 
-class PlejdService extends EventEmitter {
+class PlejdBluetoothService extends EventEmitter {
   constructor(cryptoKey, devices, sceneManager, connectionTimeout, writeQueueWaitTime, keepAlive = false) {
     super();
 
@@ -644,4 +644,4 @@ class PlejdService extends EventEmitter {
   }
 }
 
-module.exports = PlejdService;
+module.exports = PlejdBluetoothService;
