@@ -1,6 +1,5 @@
 const api = require('./api');
 const mqtt = require('./mqtt');
-const fs = require('fs');
 const PlejdService = require('./ble.bluez');
 const SceneManager = require('./scene.manager');
 
@@ -38,96 +37,92 @@ async function main() {
     });
   });
 
-  plejdApi.login().then(() => {
-    // load all sites and find the one that we want (from config)
-    plejdApi.getSites().then((site) => {
-      // load the site and retrieve the crypto key
-      plejdApi.getSite(site.site.siteId).then((cryptoKey) => {
-        // parse all devices from the API
-        const devices = plejdApi.getDevices();
+  await plejdApi.login();
+  const site = await plejdApi.getSites();
+  const cryptoKey = await plejdApi.getSite(site.site.siteId);
 
-        client.on('connected', () => {
-          console.log('plejd-mqtt: connected to mqtt.');
-          client.discover(devices);
-        });
+  // parse all devices from the API
+  const devices = plejdApi.getDevices();
 
-        client.init();
+  client.on('connected', () => {
+    console.log('plejd-mqtt: connected to mqtt.');
+    client.discover(devices);
+  });
 
-        // init the BLE interface
-        const sceneManager = new SceneManager(plejdApi.site, devices);
-        const plejd = new PlejdService(cryptoKey, devices, sceneManager, config.connectionTimeout, config.writeQueueWaitTime, true);
-        plejd.on('connectFailed', () => {
-          console.log('plejd-ble: were unable to connect, will retry connection in 10 seconds.');
-          setTimeout(() => {
-            plejd.init();
-          }, 10000);
-        });
+  client.init();
 
-        plejd.init();
+  // init the BLE interface
+  const sceneManager = new SceneManager(plejdApi.site, devices);
+  const plejd = new PlejdService(cryptoKey, devices, sceneManager, config.connectionTimeout, config.writeQueueWaitTime, true);
+  plejd.on('connectFailed', () => {
+    console.log('plejd-ble: were unable to connect, will retry connection in 10 seconds.');
+    setTimeout(() => {
+      plejd.init();
+    }, 10000);
+  });
 
-        plejd.on('authenticated', () => {
-          console.log('plejd: connected via bluetooth.');
-        });
+  plejd.init();
 
-        // subscribe to changes from Plejd
-        plejd.on('stateChanged', (deviceId, command) => {
-          client.updateState(deviceId, command);
-        });
+  plejd.on('authenticated', () => {
+    console.log('plejd: connected via bluetooth.');
+  });
 
-        plejd.on('sceneTriggered', (deviceId, scene) => {
-          client.sceneTriggered(scene);
-        });
+  // subscribe to changes from Plejd
+  plejd.on('stateChanged', (deviceId, command) => {
+    client.updateState(deviceId, command);
+  });
 
-        // subscribe to changes from HA
-        client.on('stateChanged', (device, command) => {
-          const deviceId = device.id;
+  plejd.on('sceneTriggered', (deviceId, scene) => {
+    client.sceneTriggered(scene);
+  });
 
-          if (device.typeName === 'Scene') {
-            // we're triggering a scene, lets do that and jump out.
-            // since scenes aren't "real" devices.
-            plejd.triggerScene(device.id);
-            return;
-          }
+  // subscribe to changes from HA
+  client.on('stateChanged', (device, command) => {
+    const deviceId = device.id;
 
-          let state = 'OFF';
-          let commandObj = {};
+    if (device.typeName === 'Scene') {
+      // we're triggering a scene, lets do that and jump out.
+      // since scenes aren't "real" devices.
+      plejd.triggerScene(device.id);
+      return;
+    }
 
-          if (typeof command === 'string') {
-            // switch command
-            state = command;
-            commandObj = {
-              state: state
-            };
+    let state = 'OFF';
+    let commandObj = {};
 
-            // since the switch doesn't get any updates on whether it's on or not,
-            // we fake this by directly send the updateState back to HA in order for
-            // it to change state.
-            client.updateState(deviceId, {
-              state: state === 'ON' ? 1 : 0
-            });
-          } else {
-            state = command.state;
-            commandObj = command;
-          }
+    if (typeof command === 'string') {
+      // switch command
+      state = command;
+      commandObj = {
+        state: state
+      };
 
-          if (state === 'ON') {
-            plejd.turnOn(deviceId, commandObj);
-          } else {
-            plejd.turnOff(deviceId, commandObj);
-          }
-        });
-
-        client.on('settingsChanged', (settings) => {
-          if (settings.module === 'mqtt') {
-            client.updateSettings(settings);
-          } else if (settings.module === 'ble') {
-            plejd.updateSettings(settings);
-          } else if (settings.module === 'api') {
-            plejdApi.updateSettings(settings);
-          }
-        });
+      // since the switch doesn't get any updates on whether it's on or not,
+      // we fake this by directly send the updateState back to HA in order for
+      // it to change state.
+      client.updateState(deviceId, {
+        state: state === 'ON' ? 1 : 0
       });
-    });
+    } else {
+      state = command.state;
+      commandObj = command;
+    }
+
+    if (state === 'ON') {
+      plejd.turnOn(deviceId, commandObj);
+    } else {
+      plejd.turnOff(deviceId, commandObj);
+    }
+  });
+
+  client.on('settingsChanged', (settings) => {
+    if (settings.module === 'mqtt') {
+      client.updateSettings(settings);
+    } else if (settings.module === 'ble') {
+      plejd.updateSettings(settings);
+    } else if (settings.module === 'api') {
+      plejdApi.updateSettings(settings);
+    }
   });
 }
 
