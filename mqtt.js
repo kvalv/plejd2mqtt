@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const mqtt = require('mqtt');
+const { TOPICS } = require('./constants');
 const _ = require('lodash');
 
 const startTopic = 'homeassistant/status';
@@ -67,6 +68,17 @@ const getSwitchPayload = device => ({
 
 // #endregion
 
+/** 
+ * @param { Buffer } message
+ * @returns { { brightness: number } | undefined } */
+function parseMessage(message) {
+  try {
+    return JSON.parse(message);
+  } catch (e) {
+    return undefined
+  }
+}
+
 class MqttClient extends EventEmitter {
   constructor(mqttBroker, username, password) {
     super();
@@ -97,8 +109,8 @@ class MqttClient extends EventEmitter {
         self.emit('connected');
       });
 
-      this.client.subscribe("z/home/lights/sofa/set");
-      this.client.subscribe("z/home/lights/table/set");
+      this.client.subscribe(TOPICS.table.update);
+      this.client.subscribe(TOPICS.sofa.update);
 
       this.client.subscribe(getSubscribePath(), (err) => {
         if (err) {
@@ -119,41 +131,28 @@ class MqttClient extends EventEmitter {
 
     this.client.on('message', (topic, message) => {
       console.log("mqtt: got message", topic, message)
-      //const command = message.toString();
-      const command = message.toString().substring(0, 1) === '{'
-        ? JSON.parse(message.toString())
-        : message.toString();
 
-      if (topic === startTopic && message.toString() === "online") {
-        logger('home assistant has started. lets do discovery.');
-        setTimeout(() => self.emit('connected'), 2000);
-      }
-      else if (topic === getSettingsTopic()) {
-        self.emit('settingsChanged', command);
-      }
-      if (topic == "z/home/lights/sofa/set") {
-        /** @type { { brightness: number } } */
-        let str = message.toString(undefined).trim();
-        console.log(`mikael - got message --${str}--`)
-        let parsed = JSON.parse(str);
-        // turn off
-        if (parsed.brightness === 0) {
-          self.emit("stateChanged", {id: 12},  {state: "OFF", brightness: 0});
-        } else {
-          self.emit("stateChanged", {id: 12},  {state: "ON", ...parsed});
+      if (topic == TOPICS.sofa.update || topic == TOPICS.table.update) {
+        const parsed = parseMessage(message);
+        if (!parsed) {
+          console.log("error parsing message");
+          return;
         }
-      }
-      if (topic == "z/home/lights/table/set") {
-        /** @type { { brightness: number } } */
-        let parsed = JSON.parse(message.toString(undefined));
+        const id = topic === TOPICS.sofa.update ? TOPICS.sofa.id : TOPICS.table.id;
         // turn off
         if (parsed.brightness === 0) {
-          self.emit("stateChanged", {id: 11},  {state: "OFF", brightness: 0});
+          self.emit("stateChanged", { id }, { state: "OFF", brightness: 0 });
         } else {
-          self.emit("stateChanged", {id: 11},  {state: "ON", ...parsed});
+          self.emit("stateChanged", { id }, { state: "ON", ...parsed });
         }
       }
     });
+  }
+  publish(topic, message) {
+    if (typeof message !== 'string') {
+      throw new Error('message must be a string, got ' + typeof message);
+    }
+    this.client.publish(topic, message);
   }
 
   updateSettings(settings) {
@@ -183,6 +182,7 @@ class MqttClient extends EventEmitter {
     this.client.end(callback);
   }
 
+  // TODO: this can be removed I think
   discover(devices) {
     this.devices = devices;
 

@@ -69,7 +69,8 @@ async function main() {
 
   // subscribe to changes from Plejd
   bt.on('stateChanged', (deviceId, command) => {
-    mqttClient.updateState(deviceId, command);
+    console.log("bt -- stateChanged", deviceId, command);
+    mqttClient.publish("z/home/lights/sofa", JSON.stringify(command));
   });
 
   bt.on('sceneTriggered', (deviceId, scene) => {
@@ -112,16 +113,6 @@ async function main() {
       bt.turnOn(deviceId, commandObj);
     } else {
       bt.turnOff(deviceId, commandObj);
-    }
-  });
-
-  mqttClient.on('settingsChanged', (settings) => {
-    if (settings.module === 'mqtt') {
-      mqttClient.updateSettings(settings);
-    } else if (settings.module === 'ble') {
-      bt.updateSettings(settings);
-    } else if (settings.module === 'api') {
-      plejdApi.updateSettings(settings);
     }
   });
 }
